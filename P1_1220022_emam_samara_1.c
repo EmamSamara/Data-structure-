@@ -106,10 +106,23 @@ int validateExpression(const char *expr, char *error) {
 
         if (isdigit((unsigned char)c)) {
             if (lastType == 'n' || lastType == ')') {
-                if (lastType == 'n') {
-                    sprintf(error, "invalid: there is no operator between %s%c", lastNumber, c);
+                /* collect the full next number for the error message */
+                char nextNumber[32];
+                int nstart = i;
+                int nlen = 0;
+                while (isdigit((unsigned char)expr[nstart + nlen])) {
+                    nlen++;
+                }
+                if (nlen < (int)sizeof(nextNumber)) {
+                    copyToken(expr + nstart, nlen, nextNumber);
                 } else {
-                    sprintf(error, "invalid: there is no operator between %s%c%c", lastNumber, lastClosingBracket, c);
+                    copyToken(expr + nstart, (int)sizeof(nextNumber) - 1, nextNumber);
+                }
+
+                if (lastType == 'n') {
+                    sprintf(error, "invalid: there is no operator between %s%s", lastNumber, nextNumber);
+                } else {
+                    sprintf(error, "invalid: there is no operator between %s%c%s", lastNumber, lastClosingBracket, nextNumber);
                 }
                 return 0;
             }
@@ -395,19 +408,24 @@ void freeTree(ExprNode *root) {
     free(root);
 }
 
-void printInorder(ExprNode *root) {
-    if (root == NULL) {
-        return;
+static void printInorderHelper(ExprNode *root, int isRoot, char parentOp, int isRightChild) {
+    if (root == NULL) return;
+    int isOp = (isOperatorChar(root->token[0]) && root->token[1] == '\0');
+    int needParentheses = 0;
+    if (isOp && !isRoot) {
+        int currentPrecedence = precedence(root->token[0]);
+        int parentPrecedence = precedence(parentOp);
+        needParentheses = (currentPrecedence != parentPrecedence || isRightChild);
     }
-    if (isOperatorChar(root->token[0]) && root->token[1] == '\0') {
-        printf("(");
-    }
-    printInorder(root->left);
+    if (needParentheses) printf("(");
+    printInorderHelper(root->left, 0, isOp ? root->token[0] : '\0', 0);
     printf("%s", root->token);
-    printInorder(root->right);
-    if (isOperatorChar(root->token[0]) && root->token[1] == '\0') {
-        printf(")");
-    }
+    printInorderHelper(root->right, 0, isOp ? root->token[0] : '\0', 1);
+    if (needParentheses) printf(")");
+}
+
+void printInorder(ExprNode *root) {
+    printInorderHelper(root, 1, '\0', 0);
 }
 
 void printPreorder(ExprNode *root) {
@@ -425,11 +443,18 @@ void printPreorder(ExprNode *root) {
     }
 }
 
-void printPostorder(ExprNode *root) {
+static void printPostorderHelper(ExprNode *root, int *first) {
     if (root == NULL) return;
-    printPostorder(root->left);
-    printPostorder(root->right);
-    printf("%s ", root->token);
+    printPostorderHelper(root->left, first);
+    printPostorderHelper(root->right, first);
+    if (!(*first)) printf(" ");
+    printf("%s", root->token);
+    *first = 0;
+}
+
+void printPostorder(ExprNode *root) {
+    int first = 1;
+    printPostorderHelper(root, &first);
 }
 
 void loadEquationsFromFile(const char *filename) {
