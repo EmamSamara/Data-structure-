@@ -12,7 +12,6 @@
  */
 
 #include <ctype.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,13 +99,18 @@ int validateExpression(const char *expr, char *error) {
     char lastType = 0; // 'n' number, 'o' operator, '(' left paren, ')' right paren
     int expectOperand = 1;
     char lastNumber[32] = "";
+    char lastClosingBracket = '\0';
 
     for (int i = 0; expr[i] != '\0'; i++) {
         char c = expr[i];
 
         if (isdigit((unsigned char)c)) {
             if (lastType == 'n' || lastType == ')') {
-                sprintf(error, "invalid: there is no operator between %s and %c", lastNumber, c);
+                if (lastType == 'n') {
+                    sprintf(error, "invalid: there is no operator between %s%c", lastNumber, c);
+                } else {
+                    sprintf(error, "invalid: there is no operator between %s%c%c", lastNumber, lastClosingBracket, c);
+                }
                 return 0;
             }
             lastType = 'n';
@@ -136,6 +140,10 @@ int validateExpression(const char *expr, char *error) {
 
         if (isClosingBracket(c)) {
             if (lastType == 'o' || lastType == '(' || lastType == 0) {
+                if (lastType == '(') {
+                    sprintf(error, "invalid: empty parentheses or brackets");
+                    return 0;
+                }
                 sprintf(error, "invalid: %c is not opened or empty parentheses/brackets", c);
                 return 0;
             }
@@ -148,6 +156,7 @@ int validateExpression(const char *expr, char *error) {
                 return 0;
             }
             bracketTop--;
+            lastClosingBracket = c;
             lastType = ')';
             expectOperand = 0;
             continue;
@@ -203,7 +212,7 @@ int infixToPostfix(const char *infix, char *postfix) {
     for (int i = 0; infix[i] != '\0'; i++) {
         char c = infix[i];
 
-        if (isdigit((unsigned char)c) || ((c == '+' || c == '-') && (i == 0 || infix[i - 1] == '(' || isOperatorChar(infix[i - 1])) && isdigit((unsigned char)infix[i + 1]))) {
+        if (isdigit((unsigned char)c) || ((c == '+' || c == '-') && (i == 0 || infix[i - 1] == '(' || infix[i - 1] == '[' || isOperatorChar(infix[i - 1])) && isdigit((unsigned char)infix[i + 1]))) {
             int start = i;
             if ((c == '+' || c == '-') && isdigit((unsigned char)infix[i + 1])) {
                 i++;
@@ -417,18 +426,10 @@ void printPreorder(ExprNode *root) {
 }
 
 void printPostorder(ExprNode *root) {
-    if (root == NULL) {
-        return;
-    }
+    if (root == NULL) return;
     printPostorder(root->left);
-    if (root->left != NULL) {
-        printf(" ");
-    }
     printPostorder(root->right);
-    if (root->right != NULL) {
-        printf(" ");
-    }
-    printf("%s", root->token);
+    printf("%s ", root->token);
 }
 
 void loadEquationsFromFile(const char *filename) {
@@ -547,6 +548,7 @@ void expressionTreeMenu(void) {
         printf("Invalid input. Please enter a number.\n");
         return;
     }
+    while (getchar() != '\n');
     if (number < 1 || number > equationCount) {
         printf("Equation number must be between 1 and %d.\n", equationCount);
         return;
