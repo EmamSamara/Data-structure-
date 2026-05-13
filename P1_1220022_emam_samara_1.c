@@ -26,7 +26,7 @@ typedef struct Equation {
     char postfix[MAX_POSTFIX_LENGTH];
     int valid;
     char error[128];
-    long long result;
+    int result;
 } Equation;
 
 typedef struct ExprNode {
@@ -38,18 +38,12 @@ typedef struct ExprNode {
 static Equation equations[MAX_EQUATIONS];
 static int equationCount = 0;
 
+/* Clears the current list of loaded equations. */
 void clearEquationList(void) {
     equationCount = 0;
-    for (int i = 0; i < MAX_EQUATIONS; i++) {
-        equations[i].raw[0] = '\0';
-        equations[i].cleaned[0] = '\0';
-        equations[i].postfix[0] = '\0';
-        equations[i].valid = 0;
-        equations[i].error[0] = '\0';
-        equations[i].result = 0;
-    }
 }
 
+/* Removes all spaces and tabs from an expression. */
 void trimWhitespace(const char *src, char *dst) {
     int j = 0;
     for (int i = 0; src[i] != '\0'; i++) {
@@ -60,22 +54,22 @@ void trimWhitespace(const char *src, char *dst) {
     dst[j] = '\0';
 }
 
+/* Returns true if the character is one of the four arithmetic operators. */
 int isOperatorChar(char c) {
     return c == '+' || c == '-' || c == '*' || c == '/';
 }
 
+/* Returns true if the character is an opening bracket. */
 int isOpeningBracket(char c) {
     return c == '(' || c == '[';
 }
 
+/* Returns true if the character is a closing bracket. */
 int isClosingBracket(char c) {
     return c == ')' || c == ']';
 }
 
-int bracketsMatch(char open, char close) {
-    return (open == '(' && close == ')') || (open == '[' && close == ']');
-}
-
+/* Gives the priority of an operator. */
 int precedence(char c) {
     if (c == '+' || c == '-') {
         return 1;
@@ -86,137 +80,168 @@ int precedence(char c) {
     return 0;
 }
 
-void copyToken(const char *src, int length, char *dst) {
+/* Returns true if + or - is being used as a sign before a number. */
+int isUnarySign(const char *expr, int index, char prev) {
+    if ((expr[index] == '+' || expr[index] == '-') && isdigit((unsigned char)expr[index + 1])) {
+        if (prev == '\0' || isOperatorChar(prev) || isOpeningBracket(prev)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Copies part of a string into another string. */
+void copySubstring(char *dst, const char *src, int length) {
     for (int i = 0; i < length; i++) {
         dst[i] = src[i];
     }
     dst[length] = '\0';
 }
 
+/* Reads one token from a postfix expression. */
+int readPostfixToken(const char *postfix, int *index, char *token) {
+    int length = 0;
+
+    while (postfix[*index] == ' ') {
+        (*index)++;
+    }
+    if (postfix[*index] == '\0') {
+        return 0;
+    }
+
+    if ((postfix[*index] == '+' || postfix[*index] == '-') && isdigit((unsigned char)postfix[*index + 1])) {
+        token[length++] = postfix[(*index)++];
+        while (isdigit((unsigned char)postfix[*index])) {
+            token[length++] = postfix[(*index)++];
+        }
+    } else if (isdigit((unsigned char)postfix[*index])) {
+        while (isdigit((unsigned char)postfix[*index])) {
+            token[length++] = postfix[(*index)++];
+        }
+    } else {
+        token[length++] = postfix[(*index)++];
+    }
+
+    token[length] = '\0';
+    return 1;
+}
+
+/* Copies the number that ends before a closing bracket. */
+void getNumberBeforeBracket(const char *expr, int closeIndex, char *number) {
+    int end = closeIndex - 1;
+    int start = end;
+
+    while (start >= 0 && isdigit((unsigned char)expr[start])) {
+        start--;
+    }
+    copySubstring(number, expr + start + 1, end - start);
+}
+
+/* Copies the number that starts at the given index. */
+void getNumberAt(const char *expr, int index, char *number) {
+    int start = index;
+
+    while (isdigit((unsigned char)expr[index])) {
+        index++;
+    }
+    copySubstring(number, expr + start, index - start);
+}
+
+/* Checks if an infix expression is valid. */
 int validateExpression(const char *expr, char *error) {
     char bracketStack[MAX_EXPR_LENGTH];
-    int bracketTop = -1;
-    char lastType = 0; // 'n' number, 'o' operator, '(' left paren, ')' right paren
-    int expectOperand = 1;
-    char lastNumber[32] = "";
-    char lastClosingBracket = '\0';
+    int top = -1;
+    char prev = '\0';
+
+    if (expr[0] == '\0') {
+        strcpy(error, "invalid: empty expression");
+        return 0;
+    }
 
     for (int i = 0; expr[i] != '\0'; i++) {
         char c = expr[i];
 
-        if (isdigit((unsigned char)c)) {
-            if (lastType == 'n' || lastType == ')') {
-                /* collect the full next number for the error message */
-                char nextNumber[32];
-                int nstart = i;
-                int nlen = 0;
-                while (isdigit((unsigned char)expr[nstart + nlen])) {
-                    nlen++;
-                }
-                if (nlen < (int)sizeof(nextNumber)) {
-                    copyToken(expr + nstart, nlen, nextNumber);
-                } else {
-                    copyToken(expr + nstart, (int)sizeof(nextNumber) - 1, nextNumber);
-                }
-
-                if (lastType == 'n') {
-                    sprintf(error, "invalid: there is no operator between %s%s", lastNumber, nextNumber);
-                } else {
-                    sprintf(error, "invalid: there is no operator between %s%c%s", lastNumber, lastClosingBracket, nextNumber);
-                }
-                return 0;
-            }
-            lastType = 'n';
-            expectOperand = 0;
-            int start = i;
-            while (isdigit((unsigned char)expr[i])) {
+        if ((c == '+' || c == '-') && isdigit((unsigned char)expr[i + 1]) &&
+            (prev == '\0' || isOpeningBracket(prev) ||
+            (isOperatorChar(prev) && prev != c))) {
+            i++;
+            while (isdigit((unsigned char)expr[i + 1])) {
                 i++;
             }
-            int len = i - start;
-            if ((size_t)len < sizeof(lastNumber)) {
-                copyToken(expr + start, len, lastNumber);
+            prev = expr[i];
+        } else if (isdigit((unsigned char)c)) {
+            if (prev != '\0' && isClosingBracket(prev)) {
+                char leftNumber[32];
+                char rightNumber[32];
+                getNumberBeforeBracket(expr, i - 1, leftNumber);
+                getNumberAt(expr, i, rightNumber);
+                sprintf(error, "invalid: there is no operator between %s%c%s", leftNumber, prev, rightNumber);
+                return 0;
             }
-            i--;
-            continue;
+            if (prev != '\0' && isdigit((unsigned char)prev)) {
+                strcpy(error, "invalid expression");
+                return 0;
+            }
+            while (isdigit((unsigned char)expr[i + 1])) {
+                i++;
+            }
+            prev = expr[i];
+        } else if (isOpeningBracket(c)) {
+            if (prev != '\0' && (isdigit((unsigned char)prev) || isClosingBracket(prev))) {
+                strcpy(error, "invalid expression");
+                return 0;
+            }
+            bracketStack[++top] = c;
+            prev = c;
+        } else if (isClosingBracket(c)) {
+            if (prev == '\0' || isOperatorChar(prev) || isOpeningBracket(prev)) {
+                strcpy(error, "invalid expression");
+                return 0;
+            }
+            if (top < 0) {
+                strcpy(error, "invalid expression");
+                return 0;
+            }
+            if (bracketStack[top] == '(' && c == ']' && top > 0 && bracketStack[top - 1] == '[') {
+                strcpy(error, "invalid: ( is not closed");
+                return 0;
+            }
+            if ((bracketStack[top] == '(' && c != ')') || (bracketStack[top] == '[' && c != ']')) {
+                strcpy(error, "invalid expression");
+                return 0;
+            }
+            top--;
+            prev = c;
+        } else if (isOperatorChar(c)) {
+            if (prev == '\0' || isOperatorChar(prev) || isOpeningBracket(prev)) {
+                strcpy(error, "invalid: operator is placed incorrectly");
+                return 0;
+            }
+            prev = c;
+        } else {
+            sprintf(error, "invalid: unexpected character '%c'", c);
+            return 0;
         }
+    }
 
-        if (isOpeningBracket(c)) {
-            if (lastType == 'n' || lastType == ')') {
-                sprintf(error, "invalid: there is no operator before '%c'", c);
-                return 0;
-            }
-            bracketStack[++bracketTop] = c;
-            lastType = '(';
-            expectOperand = 1;
-            continue;
+    if (isOperatorChar(prev)) {
+        strcpy(error, "invalid expression");
+        return 0;
+    }
+    if (top >= 0) {
+        if (bracketStack[top] == '(') {
+            strcpy(error, "invalid: ( is not closed");
+        } else {
+            strcpy(error, "invalid: [ is not closed");
         }
-
-        if (isClosingBracket(c)) {
-            if (lastType == 'o' || lastType == '(' || lastType == 0) {
-                if (lastType == '(') {
-                    sprintf(error, "invalid: empty parentheses or brackets");
-                    return 0;
-                }
-                sprintf(error, "invalid: %c is not opened or empty parentheses/brackets", c);
-                return 0;
-            }
-            if (bracketTop < 0) {
-                sprintf(error, "invalid: %c is not opened", c);
-                return 0;
-            }
-            if (!bracketsMatch(bracketStack[bracketTop], c)) {
-                sprintf(error, "invalid: '%c' closes '%c' incorrectly", c, bracketStack[bracketTop]);
-                return 0;
-            }
-            bracketTop--;
-            lastClosingBracket = c;
-            lastType = ')';
-            expectOperand = 0;
-            continue;
-        }
-
-        if (isOperatorChar(c)) {
-            if (expectOperand) {
-                if (c == '+' || c == '-') {
-                    if (expr[i + 1] != '\0' && isdigit((unsigned char)expr[i + 1])) {
-                        int j = i + 1;
-                        while (isdigit((unsigned char)expr[j])) {
-                            j++;
-                        }
-                        lastType = 'n';
-                        expectOperand = 0;
-                        int len = j - i;
-                        if ((size_t)len < sizeof(lastNumber)) {
-                            copyToken(expr + i, len, lastNumber);
-                        }
-                        i = j - 1;
-                        continue;
-                    }
-                }
-                sprintf(error, "invalid: operator '%c' is placed incorrectly", c);
-                return 0;
-            }
-            lastType = 'o';
-            expectOperand = 1;
-            continue;
-        }
-
-        sprintf(error, "invalid: unexpected character '%c'", c);
         return 0;
     }
 
-    if (expectOperand) {
-        sprintf(error, "invalid: expression ends with an operator");
-        return 0;
-    }
-    if (bracketTop >= 0) {
-        sprintf(error, "invalid: %c is not closed", bracketStack[bracketTop]);
-        return 0;
-    }
     strcpy(error, "valid");
     return 1;
 }
 
+/* Converts a valid infix expression to postfix form. */
 int infixToPostfix(const char *infix, char *postfix) {
     char stack[MAX_EXPR_LENGTH];
     int top = -1;
@@ -224,25 +249,30 @@ int infixToPostfix(const char *infix, char *postfix) {
 
     for (int i = 0; infix[i] != '\0'; i++) {
         char c = infix[i];
+        char prev = (i == 0) ? '\0' : infix[i - 1];
 
-        if (isdigit((unsigned char)c) || ((c == '+' || c == '-') && (i == 0 || infix[i - 1] == '(' || infix[i - 1] == '[' || isOperatorChar(infix[i - 1])) && isdigit((unsigned char)infix[i + 1]))) {
+        if (isUnarySign(infix, i, prev)) {
             int start = i;
-            if ((c == '+' || c == '-') && isdigit((unsigned char)infix[i + 1])) {
+            i++;
+            while (isdigit((unsigned char)infix[i + 1])) {
                 i++;
-                while (isdigit((unsigned char)infix[i])) {
-                    i++;
-                }
-            } else {
-                i++;
-                while (isdigit((unsigned char)infix[i])) {
-                    i++;
-                }
             }
-            int length = i - start;
-            copyToken(infix + start, length, postfix + pos);
+            int length = i - start + 1;
+            copySubstring(postfix + pos, infix + start, length);
             pos += length;
             postfix[pos++] = ' ';
-            i--;
+            continue;
+        }
+
+        if (isdigit((unsigned char)c)) {
+            int start = i;
+            while (isdigit((unsigned char)infix[i + 1])) {
+                i++;
+            }
+            int length = i - start + 1;
+            copySubstring(postfix + pos, infix + start, length);
+            pos += length;
+            postfix[pos++] = ' ';
             continue;
         }
 
@@ -263,7 +293,7 @@ int infixToPostfix(const char *infix, char *postfix) {
         }
 
         if (isOperatorChar(c)) {
-            while (top >= 0 && precedence(stack[top]) >= precedence(c)) {
+            while (top >= 0 && isOperatorChar(stack[top]) && precedence(stack[top]) >= precedence(c)) {
                 postfix[pos++] = stack[top--];
                 postfix[pos++] = ' ';
             }
@@ -284,67 +314,48 @@ int infixToPostfix(const char *infix, char *postfix) {
     return 1;
 }
 
-int evaluatePostfix(const char *postfix, long long *result, char *error) {
-    long long stack[MAX_EXPR_LENGTH];
+/* Evaluates a postfix expression using a stack. */
+int evaluatePostfix(const char *postfix, int *result, char *error) {
+    int stack[MAX_EXPR_LENGTH];
     int top = -1;
     char token[MAX_EXPR_LENGTH];
-    int i = 0;
+    int index = 0;
 
-    while (postfix[i] != '\0') {
-        if (postfix[i] == ' ') {
-            i++;
-            continue;
-        }
-
-        int length = 0;
-        if (isOperatorChar(postfix[i]) && (postfix[i + 1] == ' ' || postfix[i + 1] == '\0')) {
-            token[length++] = postfix[i++];
-        } else {
-            if (postfix[i] == '+' || postfix[i] == '-') {
-                token[length++] = postfix[i++];
-            }
-            while (isdigit((unsigned char)postfix[i])) {
-                token[length++] = postfix[i++];
-            }
-        }
-        token[length] = '\0';
-
-        if (length == 1 && isOperatorChar(token[0])) {
+    while (readPostfixToken(postfix, &index, token)) {
+        if (strlen(token) == 1 && isOperatorChar(token[0])) {
             if (top < 1) {
                 strcpy(error, "invalid: malformed postfix expression");
                 return 0;
             }
-            long long right = stack[top--];
-            long long left = stack[top--];
-            long long value = 0;
+            int right = stack[top--];
+            int left = stack[top--];
             switch (token[0]) {
-                case '+': value = left + right; break;
-                case '-': value = left - right; break;
-                case '*': value = left * right; break;
+                case '+': stack[++top] = left + right; break;
+                case '-': stack[++top] = left - right; break;
+                case '*': stack[++top] = left * right; break;
                 case '/':
                     if (right == 0) {
                         strcpy(error, "invalid: division by zero");
                         return 0;
                     }
-                    value = left / right;
+                    stack[++top] = left / right;
                     break;
-                default: value = 0; break;
             }
-            stack[++top] = value;
         } else {
-            stack[++top] = atoll(token);
+            stack[++top] = atoi(token);
         }
     }
 
-    if (top == 0) {
-        *result = stack[top];
-        strcpy(error, "valid");
-        return 1;
+    if (top != 0) {
+        strcpy(error, "invalid: malformed postfix expression");
+        return 0;
     }
-    strcpy(error, "invalid: malformed postfix expression");
-    return 0;
+    *result = stack[top];
+    strcpy(error, "valid");
+    return 1;
 }
 
+/* Creates one node for the expression tree. */
 ExprNode *createNode(const char *token) {
     ExprNode *node = malloc(sizeof(ExprNode));
     if (node == NULL) {
@@ -357,32 +368,16 @@ ExprNode *createNode(const char *token) {
     return node;
 }
 
+/* Builds an expression tree from a postfix expression. */
 ExprNode *buildExpressionTree(const char *postfix) {
     ExprNode *stack[MAX_EXPR_LENGTH];
     int top = -1;
-    int i = 0;
-    while (postfix[i] != '\0') {
-        if (postfix[i] == ' ') {
-            i++;
-            continue;
-        }
+    int index = 0;
+    char token[MAX_EXPR_LENGTH];
 
-        char token[MAX_EXPR_LENGTH];
-        int len = 0;
-        if (isOperatorChar(postfix[i]) && (postfix[i + 1] == ' ' || postfix[i + 1] == '\0')) {
-            token[len++] = postfix[i++];
-        } else {
-            if (postfix[i] == '+' || postfix[i] == '-') {
-                token[len++] = postfix[i++];
-            }
-            while (isdigit((unsigned char)postfix[i])) {
-                token[len++] = postfix[i++];
-            }
-        }
-        token[len] = '\0';
-
+    while (readPostfixToken(postfix, &index, token)) {
         ExprNode *node = createNode(token);
-        if (len == 1 && isOperatorChar(token[0])) {
+        if (strlen(token) == 1 && isOperatorChar(token[0])) {
             if (top < 1) {
                 free(node);
                 return NULL;
@@ -399,6 +394,7 @@ ExprNode *buildExpressionTree(const char *postfix) {
     return NULL;
 }
 
+/* Frees all nodes in an expression tree. */
 void freeTree(ExprNode *root) {
     if (root == NULL) {
         return;
@@ -408,55 +404,64 @@ void freeTree(ExprNode *root) {
     free(root);
 }
 
-static void printInorderHelper(ExprNode *root, int isRoot, char parentOp, int isRightChild) {
-    if (root == NULL) return;
-    int isOp = (isOperatorChar(root->token[0]) && root->token[1] == '\0');
-    int needParentheses = 0;
-    if (isOp && !isRoot) {
-        int currentPrecedence = precedence(root->token[0]);
-        int parentPrecedence = precedence(parentOp);
-        needParentheses = (currentPrecedence != parentPrecedence || isRightChild);
-    }
-    if (needParentheses) printf("(");
-    printInorderHelper(root->left, 0, isOp ? root->token[0] : '\0', 0);
-    printf("%s", root->token);
-    printInorderHelper(root->right, 0, isOp ? root->token[0] : '\0', 1);
-    if (needParentheses) printf(")");
-}
-
+/* Prints the tree using inorder traversal. */
 void printInorder(ExprNode *root) {
-    printInorderHelper(root, 1, '\0', 0);
-}
-
-void printPreorder(ExprNode *root) {
     if (root == NULL) {
         return;
     }
-    printf("%s", root->token);
-    if (root->left != NULL) {
-        printf(" ");
-        printPreorder(root->left);
+    int isOp = (isOperatorChar(root->token[0]) && root->token[1] == '\0');
+    if (isOp) {
+        printf("(");
     }
-    if (root->right != NULL) {
-        printf(" ");
-        printPreorder(root->right);
+    printInorder(root->left);
+    printf("%s", root->token);
+    printInorder(root->right);
+    if (isOp) {
+        printf(")");
     }
 }
 
-static void printPostorderHelper(ExprNode *root, int *first) {
-    if (root == NULL) return;
+/* Helper function for preorder traversal. */
+void printPreorderHelper(ExprNode *root, int *first) {
+    if (root == NULL) {
+        return;
+    }
+    if (!(*first)) {
+        printf(" ");
+    }
+    printf("%s", root->token);
+    *first = 0;
+    printPreorderHelper(root->left, first);
+    printPreorderHelper(root->right, first);
+}
+
+/* Prints the tree using preorder traversal. */
+void printPreorder(ExprNode *root) {
+    int first = 1;
+    printPreorderHelper(root, &first);
+}
+
+/* Helper function for postorder traversal. */
+void printPostorderHelper(ExprNode *root, int *first) {
+    if (root == NULL) {
+        return;
+    }
     printPostorderHelper(root->left, first);
     printPostorderHelper(root->right, first);
-    if (!(*first)) printf(" ");
+    if (!(*first)) {
+        printf(" ");
+    }
     printf("%s", root->token);
     *first = 0;
 }
 
+/* Prints the tree using postorder traversal. */
 void printPostorder(ExprNode *root) {
     int first = 1;
     printPostorderHelper(root, &first);
 }
 
+/* Reads equations from the given input file. */
 void loadEquationsFromFile(const char *filename) {
     if (filename[0] == '\0') {
         printf("File name cannot be empty.\n");
@@ -472,28 +477,31 @@ void loadEquationsFromFile(const char *filename) {
     clearEquationList();
     char buffer[MAX_EXPR_LENGTH];
     while (fgets(buffer, MAX_EXPR_LENGTH, file) != NULL && equationCount < MAX_EQUATIONS) {
+        Equation *eq = &equations[equationCount];
         size_t len = strlen(buffer);
-        while (len > 0 && (buffer[len - 1] == '\n' || buffer[len - 1] == '\r')) {
-            buffer[--len] = '\0';
+        if (len > 0 && buffer[len - 1] == '\n') {
+            buffer[len - 1] = '\0';
+            len--;
         }
         if (len == 0) {
             continue;
         }
-        strcpy(equations[equationCount].raw, buffer);
-        trimWhitespace(buffer, equations[equationCount].cleaned);
-        if (equations[equationCount].cleaned[0] == '\0') {
+        strcpy(eq->raw, buffer);
+        trimWhitespace(buffer, eq->cleaned);
+        if (eq->cleaned[0] == '\0') {
             continue;
         }
-        if (validateExpression(equations[equationCount].cleaned, equations[equationCount].error)) {
-            equations[equationCount].valid = 1;
-            infixToPostfix(equations[equationCount].cleaned, equations[equationCount].postfix);
-            if (!evaluatePostfix(equations[equationCount].postfix, &equations[equationCount].result, equations[equationCount].error)) {
-                equations[equationCount].valid = 0;
+        eq->postfix[0] = '\0';
+        eq->result = 0;
+        if (validateExpression(eq->cleaned, eq->error)) {
+            eq->valid = 1;
+            infixToPostfix(eq->cleaned, eq->postfix);
+            if (!evaluatePostfix(eq->postfix, &eq->result, eq->error)) {
+                eq->valid = 0;
+                eq->postfix[0] = '\0';
             }
         } else {
-            equations[equationCount].valid = 0;
-            equations[equationCount].postfix[0] = '\0';
-            equations[equationCount].result = 0;
+            eq->valid = 0;
         }
         equationCount++;
     }
@@ -505,6 +513,7 @@ void loadEquationsFromFile(const char *filename) {
     }
 }
 
+/* Prints whether each loaded equation is valid or invalid. */
 void printValidityReport(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -520,6 +529,7 @@ void printValidityReport(void) {
     }
 }
 
+/* Prints postfix form for all valid equations. */
 void printPostfixExpressions(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -532,6 +542,7 @@ void printPostfixExpressions(void) {
     }
 }
 
+/* Prints evaluation results for all valid equations. */
 void printEvaluationResults(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -539,11 +550,12 @@ void printEvaluationResults(void) {
     }
     for (int i = 0; i < equationCount; i++) {
         if (equations[i].valid) {
-            printf("Equation No. %d -> %lld\n", i + 1, equations[i].result);
+            printf("Equation No. %d -> %d\n", i + 1, equations[i].result);
         }
     }
 }
 
+/* Prints all invalid equations and their errors. */
 void printInvalidEquations(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -561,6 +573,7 @@ void printInvalidEquations(void) {
     }
 }
 
+/* Lets the user choose an equation and prints its tree traversals. */
 void expressionTreeMenu(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -568,11 +581,7 @@ void expressionTreeMenu(void) {
     }
     int number;
     printf("Enter equation number for tree generation: ");
-    if (scanf("%d", &number) != 1) {
-        while (getchar() != '\n');
-        printf("Invalid input. Please enter a number.\n");
-        return;
-    }
+    scanf("%d", &number);
     while (getchar() != '\n');
     if (number < 1 || number > equationCount) {
         printf("Equation number must be between 1 and %d.\n", equationCount);
@@ -604,6 +613,7 @@ void expressionTreeMenu(void) {
     freeTree(root);
 }
 
+/* Writes equation status, postfix, and results to output.txt. */
 void writeReportToFile(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -620,7 +630,7 @@ void writeReportToFile(void) {
         if (equations[i].valid) {
             fprintf(file, "Status: valid\n");
             fprintf(file, "Postfix: %s\n", equations[i].postfix);
-            fprintf(file, "Result: %lld\n", equations[i].result);
+            fprintf(file, "Result: %d\n", equations[i].result);
         } else {
             fprintf(file, "Status: invalid\n");
             fprintf(file, "Error: %s\n", equations[i].error);
@@ -631,6 +641,7 @@ void writeReportToFile(void) {
     printf("Report written to output.txt\n");
 }
 
+/* Displays the main menu. */
 void showMenu(void) {
     printf("\nCalculator System Menu:\n");
     printf("1. Read equations from file\n");
@@ -644,17 +655,14 @@ void showMenu(void) {
     printf("Choose an option: ");
 }
 
+/* Runs the menu loop. */
 int main(void) {
     clearEquationList();
     int choice = 0;
 
     while (1) {
         showMenu();
-        if (scanf("%d", &choice) != 1) {
-            while (getchar() != '\n');
-            printf("Invalid input. Please enter a number between 1 and 8.\n");
-            continue;
-        }
+        scanf("%d", &choice);
         while (getchar() != '\n');
 
         switch (choice) {
@@ -666,8 +674,8 @@ int main(void) {
                     break;
                 }
                 size_t len = strlen(filename);
-                while (len > 0 && (filename[len - 1] == '\n' || filename[len - 1] == '\r')) {
-                    filename[--len] = '\0';
+                if (len > 0 && filename[len - 1] == '\n') {
+                    filename[len - 1] = '\0';
                 }
                 loadEquationsFromFile(filename);
                 break;
