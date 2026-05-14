@@ -1,15 +1,9 @@
-/*
- * P1_1220022_emam_samara_1.c
- * Student Name: emam samara
- * Student ID: 1220022
- * Section No.: 1
- *
- * Calculator System Project
- * This program reads a list of infix equations from an input file,
- * validates each equation, converts valid equations to postfix notation,
- * evaluates postfix expressions, prints invalid equations, allows expression
- * tree traversal, and writes a summary report to output.txt.
- */
+
+ // P1_1220022_emam_samara_1.c
+ //  Name: Emam Samara
+ //  ID: 1220022
+ // Section No.1
+
 
 #include <ctype.h>
 #include <stdio.h>
@@ -39,12 +33,11 @@ static Equation equations[MAX_EQUATIONS];
 static int equationCount = 0;
 
 // this function clears the equation list
-/* Clears the current list of loaded equations. */
 void clearEquationList(void) {
     equationCount = 0;
 }
 
-/* Removes all spaces and tabs from an expression. */
+// Removes all spaces and tabs from an expression. */
 void trimWhitespace(const char *src, char *dst) {
     int j = 0;
     for (int i = 0; src[i] != '\0'; i++) {
@@ -56,25 +49,21 @@ void trimWhitespace(const char *src, char *dst) {
 }
 
 // this function checks if char is operator
-/* Returns true if the character is one of the four arithmetic operators. */
 int isOperatorChar(char c) {
     return c == '+' || c == '-' || c == '*' || c == '/';
 }
 
 // this function checks if char is opening bracket
-/* Returns true if the character is an opening bracket. */
 int isOpeningBracket(char c) {
     return c == '(' || c == '[';
 }
 
 // this function checks if char is closing bracket
-/* Returns true if the character is a closing bracket. */
 int isClosingBracket(char c) {
     return c == ')' || c == ']';
 }
 
 // this function gives operator priority
-/* Gives the priority of an operator. */
 int precedence(char c) {
     if (c == '+' || c == '-') {
         return 1;
@@ -86,7 +75,6 @@ int precedence(char c) {
 }
 
 // this function checks if operator is unary sign
-/* Returns true if + or - is being used as a sign before a number. */
 int isUnarySign(const char *expr, int index, char prev) {
     if ((expr[index] == '+' || expr[index] == '-') && isdigit((unsigned char)expr[index + 1])) {
         if (prev == '\0' || isOperatorChar(prev) || isOpeningBracket(prev)) {
@@ -97,7 +85,6 @@ int isUnarySign(const char *expr, int index, char prev) {
 }
 
 // this function copies part of string
-/* Copies part of a string into another string. */
 void copySubstring(char *dst, const char *src, int length) {
     for (int i = 0; i < length; i++) {
         dst[i] = src[i];
@@ -106,7 +93,6 @@ void copySubstring(char *dst, const char *src, int length) {
 }
 
 // this function reads token from postfix
-/* Reads one token from a postfix expression. */
 int readPostfixToken(const char *postfix, int *index, char *token) {
     int length = 0;
 
@@ -135,7 +121,6 @@ int readPostfixToken(const char *postfix, int *index, char *token) {
 }
 
 // this function gets number before bracket
-/* Copies the number that ends before a closing bracket. */
 void getNumberBeforeBracket(const char *expr, int closeIndex, char *number) {
     int end = closeIndex - 1;
     int start = end;
@@ -147,7 +132,6 @@ void getNumberBeforeBracket(const char *expr, int closeIndex, char *number) {
 }
 
 // this function gets number at index
-/* Copies the number that starts at the given index. */
 void getNumberAt(const char *expr, int index, char *number) {
     int start = index;
 
@@ -158,7 +142,6 @@ void getNumberAt(const char *expr, int index, char *number) {
 }
 
 // this function validates infix expression
-/* Checks if an infix expression is valid. */
 int validateExpression(const char *expr, char *error) {
     char bracketStack[MAX_EXPR_LENGTH];
     int top = -1;
@@ -253,7 +236,6 @@ int validateExpression(const char *expr, char *error) {
 }
 
 // this function converts infix to postfix
-/* Converts a valid infix expression to postfix form. */
 int infixToPostfix(const char *infix, char *postfix) {
     char stack[MAX_EXPR_LENGTH];
     int top = -1;
@@ -327,7 +309,6 @@ int infixToPostfix(const char *infix, char *postfix) {
 }
 
 // this function evaluates postfix expression
-/* Evaluates a postfix expression using a stack. */
 int evaluatePostfix(const char *postfix, int *result, char *error) {
     int stack[MAX_EXPR_LENGTH];
     int top = -1;
@@ -369,7 +350,6 @@ int evaluatePostfix(const char *postfix, int *result, char *error) {
 }
 
 // this function creates tree node
-/* Creates one node for the expression tree. */
 ExprNode *createNode(const char *token) {
     ExprNode *node = malloc(sizeof(ExprNode));
     if (node == NULL) {
@@ -383,7 +363,6 @@ ExprNode *createNode(const char *token) {
 }
 
 // this function builds expression tree from postfix
-/* Builds an expression tree from a postfix expression. */
 ExprNode *buildExpressionTree(const char *postfix) {
     ExprNode *stack[MAX_EXPR_LENGTH];
     int top = -1;
@@ -408,7 +387,7 @@ ExprNode *buildExpressionTree(const char *postfix) {
     }
     return NULL;
 }
-// this function frees the tree memory// Frees all nodes in an expression tree. */
+// this function frees the tree memory//
 void freeTree(ExprNode *root) {
     if (root == NULL) {
         return;
@@ -419,7 +398,6 @@ void freeTree(ExprNode *root) {
 }
 
 // this function prints tree inorder
-/* Prints the tree using inorder traversal. */
 void printInorder(ExprNode *root) {
     if (root == NULL) {
         return;
@@ -437,7 +415,6 @@ void printInorder(ExprNode *root) {
 }
 
 // this function helps print preorder
-/* Helper function for preorder traversal. */
 void printPreorderHelper(ExprNode *root, int *first) {
     if (root == NULL) {
         return;
@@ -452,14 +429,12 @@ void printPreorderHelper(ExprNode *root, int *first) {
 }
 
 // this function prints tree preorder
-/* Prints the tree using preorder traversal. */
 void printPreorder(ExprNode *root) {
     int first = 1;
     printPreorderHelper(root, &first);
 }
 
 // this function helps print postorder
-/* Helper function for postorder traversal. */
 void printPostorderHelper(ExprNode *root, int *first) {
     if (root == NULL) {
         return;
@@ -473,15 +448,12 @@ void printPostorderHelper(ExprNode *root, int *first) {
     *first = 0;
 }
 
-// this function prints tree postorder
-/* Prints the tree using postorder traversal. */
 void printPostorder(ExprNode *root) {
     int first = 1;
     printPostorderHelper(root, &first);
 }
 
 // this function loads equations from file
-/* Reads equations from the given input file. */
 void loadEquationsFromFile(const char *filename) {
     if (filename[0] == '\0') {
         printf("File name cannot be empty.\n");
@@ -534,7 +506,6 @@ void loadEquationsFromFile(const char *filename) {
 }
 
 // this function prints validity of equations
-/* Prints whether each loaded equation is valid or invalid. */
 void printValidityReport(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -551,7 +522,6 @@ void printValidityReport(void) {
 }
 
 // this function prints postfix expressions
-/* Prints postfix form for all valid equations. */
 void printPostfixExpressions(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -565,7 +535,6 @@ void printPostfixExpressions(void) {
 }
 
 // this function prints evaluation results
-/* Prints evaluation results for all valid equations. */
 void printEvaluationResults(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -579,7 +548,6 @@ void printEvaluationResults(void) {
 }
 
 // this function prints invalid equations
-/* Prints all invalid equations and their errors. */
 void printInvalidEquations(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -598,7 +566,6 @@ void printInvalidEquations(void) {
 }
 
 // this function shows expression tree menu
-/* Lets the user choose an equation and prints its tree traversals. */
 void expressionTreeMenu(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -639,7 +606,6 @@ void expressionTreeMenu(void) {
 }
 
 // this function writes report to file
-/* Writes equation status, postfix, and results to output.txt. */
 void writeReportToFile(void) {
     if (equationCount == 0) {
         printf("No equations loaded. Please choose option 1 first.\n");
@@ -668,7 +634,6 @@ void writeReportToFile(void) {
 }
 
 // this function shows the main menu
-/* Displays the main menu. */
 void showMenu(void) {
     printf("\nCalculator System Menu:\n");
     printf("1. Read equations from file\n");
@@ -683,7 +648,6 @@ void showMenu(void) {
 }
 
 // this function is the main function
-/* Runs the menu loop. */
 int main(void) {
     clearEquationList();
     int choice = 0;
